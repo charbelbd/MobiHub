@@ -54,9 +54,42 @@ async function dbDelete(table, id) {
 export const api = {
   listCategories: () => dbList('categories', 'name'),
   createCategory: (row) => dbInsert('categories', row),
+  updateCategory: (id, row) => dbUpdate('categories', id, row),
+
+deleteCategory: async (id, deleteProducts = false) => {
+  const products = (await api.listProducts()).filter(p => p.category_id === id);
+
+  if (products.length && !deleteProducts) {
+    throw new Error('This category has products. Delete with products or move them first.');
+  }
+
+  if (!supabaseConfigured) {
+    mem.products = mem.products.filter(p => p.category_id !== id);
+    mem.supplier_categories = mem.supplier_categories.filter(r => r.category_id !== id);
+  } else if (deleteProducts) {
+    await supabase.from('products').delete().eq('category_id', id);
+  }
+
+  return dbDelete('categories', id);
+},
   listProducts: () => dbList('products', 'name'),
   createProduct: (row) => dbInsert('products', row),
   updateProduct: (id, row) => dbUpdate('products', id, row),
+  deleteSupplier: async (id) => {
+  const orders = (await api.listSupplierOrders()).filter(o => o.supplier_id === id);
+
+  if (orders.length) {
+    throw new Error('This supplier has orders and cannot be deleted safely.');
+  }
+
+  if (!supabaseConfigured) {
+    mem.supplier_categories = mem.supplier_categories.filter(r => r.supplier_id !== id);
+  } else {
+    await supabase.from('supplier_categories').delete().eq('supplier_id', id);
+  }
+
+  return dbDelete('suppliers', id);
+},
   updateProductStock: async (id, qtyDelta) => {
     const products = await api.listProducts();
     const product = products.find(p => p.id === id);
