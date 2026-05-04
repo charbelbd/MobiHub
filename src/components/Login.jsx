@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import logo from "../assets/logo.jpeg";
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, authError }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -24,7 +24,7 @@ export default function Login({ onLogin }) {
       {!supabaseConfigured && <div className="notice">Demo mode: add Supabase keys in .env to enable real authentication.</div>}
       <label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="admin@example.com" /></label>
       <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" /></label>
-      {error && <div className="error">{error}</div>}
+      {(error || authError) && <div className="error">{error || authError}</div>}
       <button className="primary" disabled={loading}>{loading ? 'Signing in...' : 'Login'}</button>
     </form>
   </main>;

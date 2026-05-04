@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Modal from '../components/Modal';
 import { api } from '../lib/api';
 import { money } from '../lib/utils';
+import { finalPrice } from '../lib/pricing';
 import { useToast } from '../components/ToastProvider';
 
 export default function Stock({ refreshKey, refresh }) {
@@ -66,6 +67,7 @@ export default function Stock({ refreshKey, refresh }) {
       description: f.get('description'),
       barcode: f.get('barcode'),
       price: Number(f.get('price')),
+      profit_price: Number(f.get('profit_price') || 0),
       quantity: Number(f.get('quantity'))
     };
 
@@ -241,7 +243,9 @@ export default function Stock({ refreshKey, refresh }) {
                   <th>Name</th>
                   <th>Description</th>
                   <th>Barcode</th>
-                  <th>Price</th>
+                  <th>Base Price</th>
+                  <th>Profit Price</th>
+                  <th>Final Price</th>
                   <th>Quantity</th>
                   <th>Actions</th>
                 </tr>
@@ -254,6 +258,8 @@ export default function Stock({ refreshKey, refresh }) {
                     <td>{p.description}</td>
                     <td>{p.barcode}</td>
                     <td>{money(p.price)}</td>
+                    <td>{money(p.profit_price)}</td>
+                    <td>{money(finalPrice(p))}</td>
                     <td>{p.quantity}</td>
                     <td>
                       <div className="tableActions">
@@ -280,7 +286,7 @@ export default function Stock({ refreshKey, refresh }) {
 
                 {!rows.length && (
                   <tr>
-                    <td colSpan="6" className="emptyCell">
+                    <td colSpan="8" className="emptyCell">
                       No products inside this category yet.
                     </td>
                   </tr>
@@ -372,7 +378,18 @@ export default function Stock({ refreshKey, refresh }) {
                 step="0.01"
                 defaultValue={editProduct?.price ?? ''}
                 required={!editProduct}
-                placeholder="Price"
+                placeholder="Base price / cost"
+              />
+            </label>
+
+            <label>
+              Profit Price
+              <input
+                name="profit_price"
+                type="number"
+                step="0.01"
+                defaultValue={editProduct?.profit_price ?? ''}
+                placeholder="Profit added to POS price"
               />
             </label>
 

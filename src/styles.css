@@ -95,7 +95,7 @@
 
 /* Logo image */
 .sidebar-logo img {
-  height: 24px;
+  height: 30px;
   object-fit: cover; /* prevents stretching */
 }
 
@@ -144,3 +144,41 @@
 @media(max-width:980px){.filterBar{grid-template-columns:1fr 1fr}.stockLayout{grid-template-columns:1fr}.categoryPanel{position:static}.categoryList{display:none}.mobileCategorySelect{display:block}.lineBuilder.pro{grid-template-columns:1fr 1fr}.modalActions{display:grid}.modalActions .ghost,.modalActions .primary{width:100%}}
 @media(max-width:640px){.filterBar{grid-template-columns:1fr}.stockLayout{gap:14px}.categoryPanel{padding:14px}.lineBuilder.pro{grid-template-columns:1fr}.orderTotal{display:grid;gap:6px}.detailMeta{display:grid}.toastStack{bottom:16px}}
 .dashboardFilter{background:white;border:1px solid var(--line);border-radius:22px;padding:16px;margin-bottom:18px;box-shadow:var(--shadow);display:flex;justify-content:space-between;gap:16px;align-items:center}.dashboardFilter b{font-size:17px}.dashboardFilter p{margin:4px 0 0;color:var(--muted)}.miniFilters{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.miniFilters select,.miniFilters input{min-width:150px}.panelHeader p{margin:4px 0 0;color:var(--muted)}.lineCardTitle{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}.lineCardTitle h3{margin:0}.lineCardTitle p{margin:4px 0 0;color:var(--muted)}.lineActions{display:flex;justify-content:space-between;gap:12px;margin-top:14px}.supplierLine{grid-template-columns:1fr auto auto auto}.formSection label{display:grid;gap:7px;color:var(--muted);font-weight:800}.formSection select{width:100%}.lineBuilder.pro input,.lineBuilder.pro select{width:100%;min-width:0}.lineCard{overflow:hidden}.orderModalForm .primary:last-child{justify-content:center}@media(max-width:780px){.dashboardFilter{display:grid}.miniFilters{display:grid}.miniFilters select,.miniFilters input{width:100%;min-width:0}.lineCardTitle,.lineActions{display:grid}.supplierLine{grid-template-columns:1fr}.supplierLine .ghost{width:100%}}
+.metrics{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.checkboxRow{display:flex!important;align-items:center;gap:8px;margin:10px 0 14px;color:var(--muted);font-weight:700}.checkboxRow input{width:auto}
+.twoCols{display:grid;grid-template-columns:1fr 1fr;gap:12px}.permissionPills{display:flex;flex-wrap:wrap;gap:6px}.permissionPills span{background:var(--soft);border:1px solid #b9ebc9;color:var(--greenDark);border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px}.rowActions{display:flex;gap:8px;flex-wrap:wrap}.permissionsBox{border:1px solid var(--line);background:#f8fbf9;border-radius:18px;padding:14px;display:grid;gap:8px}.permissionsBox p{margin:0;color:var(--muted)}.permissionGrid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px}.permissionCheck{display:flex!important;align-items:center;gap:8px;margin:0!important;background:white;border:1px solid var(--line);border-radius:14px;padding:12px;color:var(--text)!important}.permissionCheck input{width:auto}.permissionCheck span{font-weight:800}@media(max-width:700px){.twoCols,.permissionGrid{grid-template-columns:1fr}.rowActions .ghost{width:100%;justify-content:center}}
+
+.passwordInputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.passwordInputWrap input {
+  width: 100%;
+  padding-right: 3rem;
+}
+
+.passwordToggle {
+  position: absolute;
+  right: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 0.75rem;
+}
+
+.passwordToggle:hover {
+  background: var(--soft);
+  color: var(--text);
+}
+
+.permissionCheck.disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}

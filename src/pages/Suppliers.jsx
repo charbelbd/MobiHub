@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Modal from '../components/Modal';
 import { api } from '../lib/api';
 import { formatDate, money } from '../lib/utils';
+import { finalPrice, profitPrice } from '../lib/pricing';
 import { useToast } from '../components/ToastProvider';
 
 export default function Suppliers({ refreshKey, refresh }) {
@@ -465,6 +466,7 @@ function OrderModal({
   const [unit, setUnit] = useState('');
   const [total, setTotal] = useState('');
   const [last, setLast] = useState('unit');
+  const [applyProfit, setApplyProfit] = useState(false);
   const [subModal, setSubModal] = useState(null);
 
   const supplierCats = categories.filter(c =>
@@ -472,6 +474,7 @@ function OrderModal({
   );
 
   const catProducts = products.filter(p => p.category_id === cat);
+  const selectedProduct = products.find(p => p.id === prod);
   const orderTotal = lines.reduce((s, l) => s + Number(l.total_price || 0), 0);
 
   const recalc = (nextQty = qty, nextUnit = unit, nextTotal = total, nextLast = last) => {
@@ -492,8 +495,11 @@ function OrderModal({
     if (!p) return toast('Select a product before adding the line', 'error');
 
     const q = Math.max(1, Number(qty || 1));
-    const t = Number(total || q * Number(unit || 0));
-    const u = Number(unit || t / q);
+    const enteredUnit = Number(unit || 0);
+    const productProfit = applyProfit ? profitPrice(p) : 0;
+    const u = Number(unit || (total ? Number(total) / q : 0));
+    const finalUnit = applyProfit ? (enteredUnit || finalPrice(p)) : u;
+    const t = Number(total || q * finalUnit);
 
     setLines([
       ...lines,
@@ -502,8 +508,10 @@ function OrderModal({
         category_id: cat,
         product_name: p.name,
         quantity: q,
-        unit_price: u,
-        total_price: t
+        unit_price: finalUnit,
+        profit_price: productProfit,
+        total_price: t,
+        total_profit: productProfit * q
       }
     ]);
 
@@ -512,6 +520,7 @@ function OrderModal({
     setUnit('');
     setTotal('');
     setLast('unit');
+    setApplyProfit(false);
   };
 
   const saveCategory = async e => {
@@ -558,6 +567,7 @@ function OrderModal({
         description: f.get('description'),
         barcode: f.get('barcode'),
         price: Number(f.get('price') || 0),
+        profit_price: Number(f.get('profit_price') || 0),
         quantity: Number(f.get('quantity') || 0)
       });
 
@@ -609,6 +619,8 @@ function OrderModal({
             </button>
           </div>
 
+          <label className="checkboxRow"><input type="checkbox" checked={applyProfit} onChange={e => { const checked = e.target.checked; setApplyProfit(checked); if (selectedProduct) { const nextUnit = checked ? finalPrice(selectedProduct) : Number(selectedProduct.price || 0); setUnit(String(nextUnit)); recalc(qty, nextUnit, total, 'unit'); } }} /> Apply product profit to this supplier order line</label>
+
           <div className="lineBuilder pro">
             <label>
               Subproduct / category
@@ -630,11 +642,11 @@ function OrderModal({
 
             <label>
               Product
-              <select value={prod} onChange={e => setProd(e.target.value)} disabled={!cat}>
+              <select value={prod} onChange={e => { setProd(e.target.value); const p = products.find(x => x.id === e.target.value); if (p && !unit) setUnit(String(applyProfit ? finalPrice(p) : Number(p.price || 0))); }} disabled={!cat}>
                 <option value="">Select product</option>
                 {catProducts.map(p => (
                   <option value={p.id} key={p.id}>
-                    {p.name}
+                    {p.name} - final {money(finalPrice(p))}
                   </option>
                 ))}
               </select>
@@ -698,7 +710,7 @@ function OrderModal({
             <div className="detailLine supplierLine" key={i}>
               <span>{l.product_name}</span>
               <span>
-                Qty {l.quantity} × {money(l.unit_price)}
+                Qty {l.quantity} × {money(l.unit_price)}{Number(l.profit_price || 0) ? ` (profit ${money(l.profit_price)} each)` : ''}
               </span>
               <b>{money(l.total_price)}</b>
               <button className="ghost dangerText" type="button" onClick={() => setLines(lines.filter((_, x) => x !== i))}>
@@ -754,7 +766,12 @@ function OrderModal({
 
             <label>
               Price
-              <input name="price" type="number" step="0.01" placeholder="Selling price" />
+              <input name="price" type="number" step="0.01" placeholder="Base price / cost" />
+            </label>
+
+            <label>
+              Profit Price
+              <input name="profit_price" type="number" step="0.01" placeholder="Profit added to POS price" />
             </label>
 
             <label>
