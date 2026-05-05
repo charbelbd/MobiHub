@@ -178,7 +178,7 @@ export default function Users({ refreshKey, refresh, currentUserAccess }) {
           <b>Permissions</b>
           <p>{form.is_admin ? 'Admin users have full access to every page.' : 'Select the pages this user can open. You can edit these permissions anytime.'}</p>
           <div className="permissionGrid">
-            {PAGE_PERMISSIONS.filter((p) => p.id !== 'users').map((permission) => (
+            {PAGE_PERMISSIONS.map((permission) => (
               <label key={permission.id} className={`permissionCheck ${form.is_admin ? 'disabled' : ''}`}>
                 <input
                   type="checkbox"
