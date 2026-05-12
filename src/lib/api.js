@@ -25,7 +25,7 @@ const mem = {
   app_users: [
     { id: 'usr-admin', name: 'Demo', last_name: 'Admin', username: 'demo@admin.local', permissions: ALL_PERMISSION_IDS, is_admin: true, created_at: now() }
   ],
-  suppliers: [], supplier_categories: [], supplier_orders: [], supplier_order_items: [], pos_orders: [], pos_order_items: [], expenses: []
+  suppliers: [], supplier_categories: [], supplier_orders: [], supplier_order_items: [], pos_orders: [], pos_order_items: [], pos_payments: [], expenses: []
 };
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -38,6 +38,68 @@ function cleanProductRow(row) {
   if ('quantity' in cleaned) cleaned.quantity = Number(cleaned.quantity || 0);
   if ('barcode' in cleaned && (!cleaned.barcode || String(cleaned.barcode).trim() === '')) cleaned.barcode = null;
   return cleaned;
+}
+
+
+function localPaymentKey() {
+  return 'mobihub_pos_payments';
+}
+
+function listLocalPayments() {
+  if (typeof window === 'undefined') return clone(mem.pos_payments || []);
+  try { return JSON.parse(window.localStorage.getItem(localPaymentKey()) || '[]'); }
+  catch { return []; }
+}
+
+function saveLocalPayments(rows) {
+  if (typeof window === 'undefined') { mem.pos_payments = rows; return; }
+  window.localStorage.setItem(localPaymentKey(), JSON.stringify(rows));
+}
+
+async function listPaymentRows() {
+  if (!supabaseConfigured) { await wait(); return clone(mem.pos_payments || []); }
+  const { data, error } = await supabase.from('pos_payments').select('*').order('payment_date', { ascending: false });
+  if (!error) return data || [];
+  return listLocalPayments();
+}
+
+async function insertPaymentRow(row) {
+  const payment = {
+    id: row.id || idCode('PAY'),
+    created_at: row.created_at || now(),
+    pos_order_id: row.pos_order_id,
+    order_code: row.order_code || null,
+    amount: Number(row.amount || 0),
+    payment_date: row.payment_date || now(),
+    note: row.note || null
+  };
+
+  if (!supabaseConfigured) {
+    mem.pos_payments.unshift(payment);
+    await wait();
+    return clone(payment);
+  }
+
+  const { data, error } = await supabase.from('pos_payments').insert(payment).select().single();
+  if (!error) return data;
+
+  const rows = listLocalPayments();
+  rows.unshift(payment);
+  saveLocalPayments(rows);
+  return payment;
+}
+
+async function deletePaymentRowsForOrder(orderId) {
+  if (!supabaseConfigured) {
+    mem.pos_payments = mem.pos_payments.filter(p => p.pos_order_id !== orderId);
+    return true;
+  }
+
+  const { error } = await supabase.from('pos_payments').delete().eq('pos_order_id', orderId);
+  if (error) {
+    saveLocalPayments(listLocalPayments().filter(p => p.pos_order_id !== orderId));
+  }
+  return true;
 }
 
 function cleanUserRow(row) {
@@ -226,17 +288,55 @@ export const api = {
   listPosOrders: () => dbList('pos_orders', 'created_at'),
   listPosOrderItems: () => dbList('pos_order_items', 'created_at'),
   createPosOrder: async (order, items) => {
-    const created = await dbInsert('pos_orders', { ...order, order_code: order.order_code || idCode('POS') });
+    const created = await dbInsert('pos_orders', { ...order, order_code: order.order_code || idCode('POS'), paid_at: order.paid ? now() : null });
     for (const item of items) {
       await dbInsert('pos_order_items', { ...item, pos_order_id: created.id });
       await api.updateProductStock(item.product_id, -Number(item.quantity || 0));
     }
+    if (created.paid) {
+      await insertPaymentRow({
+        pos_order_id: created.id,
+        order_code: created.order_code,
+        amount: Number(created.total_price || 0),
+        payment_date: created.paid_at || created.created_at || now(),
+        note: 'Full payment'
+      });
+    }
     return created;
   },
   updatePosOrder: (id, row) => dbUpdate('pos_orders', id, row),
+  listPosPayments: () => listPaymentRows(),
+  createPosPayment: async (row) => {
+    const orders = await api.listPosOrders();
+    const order = orders.find(o => o.id === row.pos_order_id);
+    if (!order) throw new Error('POS order was not found.');
+
+    const payments = (await api.listPosPayments()).filter(p => p.pos_order_id === order.id);
+    const alreadyPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
+    const total = Number(order.total_price || 0);
+    const amount = Number(row.amount || 0);
+    if (!amount || amount <= 0) throw new Error('Payment amount must be greater than zero.');
+    if (alreadyPaid + amount > total + 0.009) throw new Error('Payment amount is greater than the remaining balance.');
+
+    const payment = await insertPaymentRow({
+      ...row,
+      order_code: order.order_code,
+      amount,
+      payment_date: row.payment_date || now()
+    });
+
+    const newPaidTotal = alreadyPaid + amount;
+    await api.updatePosOrder(order.id, {
+      paid: newPaidTotal >= total - 0.009,
+      paid_at: newPaidTotal >= total - 0.009 ? payment.payment_date : null
+    });
+
+    return payment;
+  },
   deletePosOrder: async (id) => {
     const orderItems = (await api.listPosOrderItems()).filter(i => i.pos_order_id === id);
     for (const item of orderItems) await api.updateProductStock(item.product_id, Number(item.quantity || 0));
+    await deletePaymentRowsForOrder(id);
     if (!supabaseConfigured) mem.pos_order_items = mem.pos_order_items.filter(i => i.pos_order_id !== id);
     else await supabase.from('pos_order_items').delete().eq('pos_order_id', id);
     return dbDelete('pos_orders', id);

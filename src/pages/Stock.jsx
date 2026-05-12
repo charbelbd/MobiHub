@@ -17,6 +17,7 @@ export default function Stock({ refreshKey, refresh }) {
   const [deleteProduct, setDeleteProduct] = useState(null);
   const [deleteCategory, setDeleteCategory] = useState(null);
   const [categorySearch, setCategorySearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
 
   const load = () =>
     Promise.all([api.listCategories(), api.listProducts()]).then(([c, p]) => {
@@ -130,7 +131,14 @@ export default function Stock({ refreshKey, refresh }) {
     [categories, categorySearch]
   );
 
-  const rows = products.filter(p => p.category_id === active);
+  const normalizedProductSearch = productSearch.trim().toLowerCase();
+  const rows = normalizedProductSearch
+    ? products.filter(p =>
+        `${p.name || ''} ${p.barcode || ''}`
+          .toLowerCase()
+          .includes(normalizedProductSearch)
+      )
+    : products.filter(p => p.category_id === active);
   const activeCategory = categories.find(c => c.id === active);
 
   return (
@@ -211,8 +219,15 @@ export default function Stock({ refreshKey, refresh }) {
           <div className="tableTitle stockTitleActions">
             <div>
               <h2>{activeCategory?.name || 'Products'}</h2>
-              <p>{activeCategory?.description || 'Selected category products'}</p>
+              <p>{normalizedProductSearch ? 'Search results across all product types' : activeCategory?.description || 'Selected category products'}</p>
             </div>
+
+            <input
+              className="categorySearch"
+              value={productSearch}
+              onChange={e => setProductSearch(e.target.value)}
+              placeholder="Search products by name or barcode..."
+            />
 
             {activeCategory && (
               <div className="actionGroup">
@@ -287,7 +302,7 @@ export default function Stock({ refreshKey, refresh }) {
                 {!rows.length && (
                   <tr>
                     <td colSpan="8" className="emptyCell">
-                      No products inside this category yet.
+                      {normalizedProductSearch ? 'No products match this search.' : 'No products inside this category yet.'}
                     </td>
                   </tr>
                 )}
