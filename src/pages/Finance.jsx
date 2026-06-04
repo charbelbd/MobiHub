@@ -295,19 +295,24 @@ export default function Finance({ refreshKey, refresh }) {
   const getOrderStatus = (o) =>
     String(o.payment_status || o.status || '').trim().toLowerCase();
 
-  const totalNotPaid = orders
-    .filter(
-      (o) =>
-        inRange(o.created_at, metricFilter, metricCustom) &&
-        getOrderStatus(o) === 'not paid'
-    )
-    .reduce(
-      (s, o) =>
-        s + Math.max(0, Number(o.total_price || 0) - paidAmountForOrder(o.id)),
-      0
-    );
+const totalNotPaid = orders
+  .filter(o => {
+    if (!inRange(o.created_at, metricFilter, metricCustom)) return false;
 
-  const reportTotal = revenue - totalExpenses + totalStockPrice + totalNotPaid;
+    const paidAmount = paidAmountForOrder(o.id);
+    const total = Number(o.total_price || 0);
+
+    return paidAmount < total - 0.009;
+  })
+  .reduce(
+    (s, o) =>
+      s + Math.max(
+        0,
+        Number(o.total_price || 0) - paidAmountForOrder(o.id)
+      ),
+    0
+  );
+    const reportTotal = revenue - totalExpenses + totalStockPrice + totalNotPaid;
 
   const phoneRevenue = (categoryName) => {
     const cat = categories.find(
