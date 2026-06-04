@@ -289,30 +289,27 @@ export default function Finance({ refreshKey, refresh }) {
 
   const totalExpenses = metricSupplierExpenses + metricManualExpenses;
 
-  const paidAmountForOrder = (orderId) =>
-    Number((paymentsByOrder[orderId] || []).reduce((s, p) => s + Number(p.amount || 0), 0));
+  const paidAmountForOrder = (order) => {
+    const paidFromPayments = Number(
+      (paymentsByOrder[order.id] || []).reduce((s, p) => s + Number(p.amount || 0), 0)
+    );
 
-  const getOrderStatus = (o) =>
-    String(o.payment_status || o.status || '').trim().toLowerCase();
+    // Old fully-paid POS orders may not have rows in pos_payments.
+    if (paidFromPayments <= 0 && order.paid) {
+      return Number(order.total_price || 0);
+    }
 
-const totalNotPaid = orders
-  .filter(o => {
-    if (!inRange(o.created_at, metricFilter, metricCustom)) return false;
+    return paidFromPayments;
+  };
 
-    const paidAmount = paidAmountForOrder(o.id);
-    const total = Number(o.total_price || 0);
+  const balanceForOrder = (order) =>
+    Math.max(0, Number(order.total_price || 0) - paidAmountForOrder(order));
 
-    return paidAmount < total - 0.009;
-  })
-  .reduce(
-    (s, o) =>
-      s + Math.max(
-        0,
-        Number(o.total_price || 0) - paidAmountForOrder(o.id)
-      ),
-    0
-  );
-    const reportTotal = revenue - totalExpenses + totalStockPrice + totalNotPaid;
+  const totalNotPaid = orders
+    .filter((o) => inRange(o.created_at, metricFilter, metricCustom))
+    .reduce((s, o) => s + balanceForOrder(o), 0);
+
+  const reportTotal = revenue - totalExpenses + totalStockPrice + totalNotPaid;
 
   const phoneRevenue = (categoryName) => {
     const cat = categories.find(
