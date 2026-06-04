@@ -38,7 +38,13 @@ export default function Finance({ refreshKey, refresh }) {
   const metricManualExpenses=expenses.filter(e=>inRange(e.created_at,metricFilter,metricCustom)&&!(e.is_supplier&&e.payment_status!=='paid')).reduce((s,e)=>s+Number(e.price||0),0);
   const totalExpenses=metricSupplierExpenses+metricManualExpenses;
   const paidAmountForOrder=(orderId)=>Number((paymentsByOrder[orderId]||[]).reduce((s,p)=>s+Number(p.amount||0),0));
-  const totalNotPaid=orders.filter(o=>inRange(o.created_at,metricFilter,metricCustom)).reduce((s,o)=>s+Math.max(0,Number(o.total_price||0)-paidAmountForOrder(o.id)),0);
+const totalNotPaid = orders
+  .filter(
+    o =>
+      inRange(o.created_at, metricFilter, metricCustom) &&
+      o.payment_status === 'Not Paid'
+  )
+  .reduce((s, o) => s + Math.max(0, Number(o.total_price || 0) - paidAmountForOrder(o.id)), 0);
   const reportTotal=revenue-totalExpenses+totalStockPrice+totalNotPaid;
   const phoneRevenue=(categoryName)=>{const cat=categories.find(c=>c.name.toLowerCase()===categoryName.toLowerCase());const productIds=products.filter(p=>p.category_id===cat?.id).map(p=>p.id);return items.filter(i=>productIds.includes(i.product_id)).reduce((s,i)=>{const order=orders.find(o=>o.id===i.pos_order_id); if(!order)return s; const paidForOrder=metricPayments.filter(e=>e.order.id===order.id).reduce((x,e)=>x+Number(e.amount||0),0); const ratio=Number(order.total_price||0)?paidForOrder/Number(order.total_price||0):0; return s+Number(i.total_price||0)*ratio;},0)};
   const expenseSupplierRows=supplierOrders.filter(o=>o.status==='arrived'&&inRange(o.created_at,expenseFilter,expenseCustom));
