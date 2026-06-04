@@ -183,3 +183,63 @@
   cursor: not-allowed;
 }
 .pill.warn{background:#fef3c7;color:#92400e}.stockTitleActions{display:grid;grid-template-columns:1fr minmax(220px,320px) auto;gap:12px;align-items:start}.actionGroup,.tableActions{display:flex;gap:8px;flex-wrap:wrap}@media(max-width:900px){.stockTitleActions{grid-template-columns:1fr}.actionGroup{display:grid}}
+
+/* POS order summary independent scrolling and quantity controls */
+.orderBox{
+  max-height:calc(100vh - 48px);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.orderBoxHeader{flex:0 0 auto}
+.orderBoxFooter{
+  flex:0 0 auto;
+  border-top:1px solid var(--line);
+  padding-top:14px;
+  background:white;
+}
+.orderBoxFooter .secondary,.orderBoxFooter .primary{
+  width:100%;
+  justify-content:center;
+  margin-top:10px;
+}
+.orderBox .cartList{
+  flex:1 1 auto;
+  min-height:120px;
+  max-height:42vh;
+  overflow:auto;
+  padding-right:4px;
+}
+.orderBox .cartItem{
+  grid-template-columns:minmax(0,1fr) auto auto auto;
+}
+.quantityControls{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  background:var(--soft);
+  border:1px solid #b9ebc9;
+  border-radius:999px;
+  padding:4px 6px;
+}
+.quantityControls button{
+  border:0;
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  display:grid;
+  place-items:center;
+  background:white;
+  color:var(--greenDark);
+  padding:0;
+}
+.quantityControls b{min-width:22px;text-align:center}
+.cartItem .removeCartItem{background:#fee2e2;color:#991b1b}
+@media(max-width:980px){
+  .orderBox{max-height:none;overflow:visible}
+  .orderBox .cartList{max-height:none;overflow:visible}
+}
+@media(max-width:640px){
+  .orderBox .cartItem{grid-template-columns:1fr;align-items:stretch}
+  .quantityControls{justify-content:center}
+}
