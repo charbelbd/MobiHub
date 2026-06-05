@@ -279,13 +279,9 @@ export default function Finance({ refreshKey, refresh }) {
     .filter((o) => o.status === 'arrived' && inRange(o.created_at, metricFilter, metricCustom))
     .reduce((s, o) => s + Number(o.total_price || 0), 0);
 
-  const metricManualExpenses = expenses
-    .filter(
-      (e) =>
-        inRange(e.created_at, metricFilter, metricCustom) &&
-        !(e.is_supplier && e.payment_status !== 'paid')
-    )
-    .reduce((s, e) => s + Number(e.price || 0), 0);
+const metricManualExpenses = expenses
+  .filter((e) => inRange(e.created_at, metricFilter, metricCustom))
+  .reduce((s, e) => s + Number(e.price || 0), 0);
 
   const totalExpenses = metricSupplierExpenses + metricManualExpenses;
 

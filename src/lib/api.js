@@ -343,6 +343,11 @@ export const api = {
   },
 
   listExpenses: () => dbList('expenses', 'created_at'),
-  createExpense: (row) => dbInsert('expenses', { ...row, expense_code: row.expense_code || idCode('EXP'), is_supplier: Boolean(row.is_supplier), payment_status: row.is_supplier ? (row.payment_status || 'paid') : 'paid' }),
+createExpense: (row) =>
+  dbInsert('expenses', {
+    ...row,
+    expense_code: row.expense_code || idCode('EXP')
+  }),
+  
   updateExpense: (id, row) => dbUpdate('expenses', id, row)
 };
