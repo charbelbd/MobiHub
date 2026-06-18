@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx-js-style';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import Modal from '../components/Modal';
 import { api } from '../lib/api';
@@ -157,6 +158,83 @@ function FilterControls({ filter, setFilter, custom, setCustom, allowYear = fals
   );
 }
 
+const HEADER_STYLE = {
+  font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 12 },
+  fill: { fgColor: { rgb: '16A34A' } },
+  alignment: { horizontal: 'center', vertical: 'center' },
+  border: {
+    top: { style: 'thin', color: { rgb: '15803D' } },
+    bottom: { style: 'thin', color: { rgb: '15803D' } },
+    left: { style: 'thin', color: { rgb: '15803D' } },
+    right: { style: 'thin', color: { rgb: '15803D' } },
+  },
+};
+
+const CATEGORY_STYLE = {
+  font: { bold: true, sz: 12, color: { rgb: '15803D' } },
+  fill: { fgColor: { rgb: 'DCFCE7' } },
+  border: {
+    top: { style: 'medium', color: { rgb: '86EFAC' } },
+    bottom: { style: 'medium', color: { rgb: '86EFAC' } },
+    left: { style: 'thin', color: { rgb: '86EFAC' } },
+    right: { style: 'thin', color: { rgb: '86EFAC' } },
+  },
+};
+
+const CATEGORY_QTY_STYLE = {
+  ...CATEGORY_STYLE,
+  alignment: { horizontal: 'center', vertical: 'center' },
+};
+
+const CATEGORY_VALUE_STYLE = {
+  ...CATEGORY_STYLE,
+  alignment: { horizontal: 'right', vertical: 'center' },
+  numFmt: '$#,##0.00',
+};
+
+const PRODUCT_STYLE = {
+  font: { sz: 11 },
+  border: {
+    top: { style: 'thin', color: { rgb: 'DCE7DF' } },
+    bottom: { style: 'thin', color: { rgb: 'DCE7DF' } },
+    left: { style: 'thin', color: { rgb: 'DCE7DF' } },
+    right: { style: 'thin', color: { rgb: 'DCE7DF' } },
+  },
+};
+
+const PRODUCT_QTY_STYLE = {
+  ...PRODUCT_STYLE,
+  alignment: { horizontal: 'center', vertical: 'center' },
+};
+
+const PRODUCT_VALUE_STYLE = {
+  ...PRODUCT_STYLE,
+  alignment: { horizontal: 'right', vertical: 'center' },
+  numFmt: '$#,##0.00',
+};
+
+const GRAND_TOTAL_STYLE = {
+  font: { bold: true, sz: 14, color: { rgb: 'FFFFFF' } },
+  fill: { fgColor: { rgb: '0F2518' } },
+  border: {
+    top: { style: 'medium', color: { rgb: '0F2518' } },
+    bottom: { style: 'medium', color: { rgb: '0F2518' } },
+    left: { style: 'medium', color: { rgb: '0F2518' } },
+    right: { style: 'medium', color: { rgb: '0F2518' } },
+  },
+};
+
+const GRAND_TOTAL_QTY_STYLE = {
+  ...GRAND_TOTAL_STYLE,
+  alignment: { horizontal: 'center', vertical: 'center' },
+};
+
+const GRAND_TOTAL_VALUE_STYLE = {
+  ...GRAND_TOTAL_STYLE,
+  alignment: { horizontal: 'right', vertical: 'center' },
+  numFmt: '$#,##0.00',
+};
+
 export default function Finance({ refreshKey, refresh }) {
   const toast = useToast();
 
@@ -171,6 +249,9 @@ export default function Finance({ refreshKey, refresh }) {
   const [expenseFilter, setExpenseFilter] = useState('day');
   const [chartFilter, setChartFilter] = useState('day');
   const [modal, setModal] = useState(false);
+  const [exportModal, setExportModal] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState({});
+  const [exporting, setExporting] = useState(false);
 
   const today = toInput(new Date());
 
@@ -380,6 +461,165 @@ export default function Finance({ refreshKey, refresh }) {
     toast('Expense added successfully');
   };
 
+  const allCategoriesSelected = useMemo(
+    () => categories.length > 0 && categories.every((c) => selectedCategories[c.id]),
+    [categories, selectedCategories]
+  );
+
+  const openExportModal = () => {
+    const initial = {};
+    categories.forEach((c) => {
+      initial[c.id] = true;
+    });
+    setSelectedCategories(initial);
+    setExportModal(true);
+  };
+
+  const handleSelectAll = (checked) => {
+    const next = {};
+    categories.forEach((c) => {
+      next[c.id] = checked;
+    });
+    setSelectedCategories(next);
+  };
+
+  const handleToggleCategory = (catId) => {
+    setSelectedCategories((prev) => ({
+      ...prev,
+      [catId]: !prev[catId],
+    }));
+  };
+
+  const selectedCount = useMemo(
+    () => categories.filter((c) => selectedCategories[c.id]).length,
+    [categories, selectedCategories]
+  );
+
+  const exportStockToExcel = async () => {
+    const selectedCatIds = categories
+      .filter((c) => selectedCategories[c.id])
+      .map((c) => c.id);
+
+    if (selectedCatIds.length === 0) {
+      toast('Please select at least one category to export', 'error');
+      return;
+    }
+
+    setExporting(true);
+
+    try {
+      const selectedCategoriesData = categories.filter((c) => selectedCategories[c.id]);
+
+      // Build the worksheet rows: header, then for each category: a category row + product rows.
+      const aoa = [['Category / Product', 'Quantity', 'Stock Value']];
+      const rowMeta = [{ type: 'header' }];
+
+      let grandTotalQty = 0;
+      let grandTotalProductCount = 0;
+      let grandTotalValue = 0;
+
+      selectedCategoriesData.forEach((category) => {
+        const catProducts = products.filter((p) => p.category_id === category.id);
+        const catTotalQty = catProducts.reduce(
+          (s, p) => s + Number(p.quantity || 0),
+          0
+        );
+        const catTotalValue = catProducts.reduce(
+          (s, p) => s + lineTotal(basePrice(p), p.quantity),
+          0
+        );
+
+        // Category row
+        aoa.push([category.name, catTotalQty, catTotalValue]);
+        rowMeta.push({ type: 'category', productCount: catProducts.length });
+
+        // Product rows
+        catProducts.forEach((p) => {
+          const qty = Number(p.quantity || 0);
+          const value = lineTotal(basePrice(p), p.quantity);
+          aoa.push([`    ${p.name}`, qty, value]);
+          rowMeta.push({ type: 'product' });
+        });
+
+        grandTotalQty += catTotalQty;
+        grandTotalProductCount += catProducts.length;
+        grandTotalValue += catTotalValue;
+      });
+
+      // Grand total row
+      aoa.push(['GRAND TOTAL', grandTotalProductCount, grandTotalValue]);
+      rowMeta.push({ type: 'grand' });
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+      // Apply styles row by row.
+      const totalRows = aoa.length;
+      for (let r = 0; r < totalRows; r++) {
+        const meta = rowMeta[r];
+        const aAddr = XLSX.utils.encode_cell({ r, c: 0 });
+        const bAddr = XLSX.utils.encode_cell({ r, c: 1 });
+        const cAddr = XLSX.utils.encode_cell({ r, c: 2 });
+
+        if (meta.type === 'header') {
+          ws[aAddr] = { v: aoa[r][0], t: 's', s: HEADER_STYLE };
+          ws[bAddr] = { v: aoa[r][1], t: 's', s: HEADER_STYLE };
+          ws[cAddr] = { v: aoa[r][2], t: 's', s: HEADER_STYLE };
+        } else if (meta.type === 'category') {
+          ws[aAddr] = {
+            v: aoa[r][0],
+            t: 's',
+            s: { ...CATEGORY_STYLE, alignment: { horizontal: 'left', vertical: 'center' } },
+          };
+          ws[bAddr] = { v: aoa[r][1], t: 'n', s: CATEGORY_QTY_STYLE };
+          ws[cAddr] = { v: aoa[r][2], t: 'n', s: CATEGORY_VALUE_STYLE };
+        } else if (meta.type === 'product') {
+          ws[aAddr] = {
+            v: aoa[r][0],
+            t: 's',
+            s: { ...PRODUCT_STYLE, alignment: { horizontal: 'left', vertical: 'center' } },
+          };
+          ws[bAddr] = { v: aoa[r][1], t: 'n', s: PRODUCT_QTY_STYLE };
+          ws[cAddr] = { v: aoa[r][2], t: 'n', s: PRODUCT_VALUE_STYLE };
+        } else if (meta.type === 'grand') {
+          ws[aAddr] = {
+            v: aoa[r][0],
+            t: 's',
+            s: { ...GRAND_TOTAL_STYLE, alignment: { horizontal: 'left', vertical: 'center' } },
+          };
+          ws[bAddr] = { v: aoa[r][1], t: 'n', s: GRAND_TOTAL_QTY_STYLE };
+          ws[cAddr] = { v: aoa[r][2], t: 'n', s: GRAND_TOTAL_VALUE_STYLE };
+        }
+      }
+
+      // Column widths and row heights
+      ws['!cols'] = [{ wch: 42 }, { wch: 14 }, { wch: 18 }];
+      ws['!rows'] = aoa.map((_, idx) => {
+        const meta = rowMeta[idx];
+        if (meta.type === 'header') return { hpt: 24 };
+        if (meta.type === 'category') return { hpt: 22 };
+        if (meta.type === 'grand') return { hpt: 28 };
+        return { hpt: 18 };
+      });
+
+      // Freeze the header row so it stays visible when scrolling.
+      ws['!freeze'] = { xSplit: '0', ySplit: '1', topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Stock Export');
+
+      const filename = `Stock_Export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, filename);
+
+      setExportModal(false);
+      toast(`Stock exported: ${selectedCatIds.length} categor${selectedCatIds.length === 1 ? 'y' : 'ies'}`);
+    } catch (err) {
+      console.error(err);
+      toast(err.message || 'Could not export stock', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
       <div className="pageHeader">
@@ -387,9 +627,14 @@ export default function Finance({ refreshKey, refresh }) {
           <h1>Financial Dashboard</h1>
           <p>Revenue and profit are based on actual POS payment dates, including partial payments.</p>
         </div>
-        <button className="primary" onClick={() => setModal(true)}>
-          Add Expense
-        </button>
+        <div className="actionGroup">
+          <button className="secondary" onClick={openExportModal}>
+            Export Stock
+          </button>
+          <button className="primary" onClick={() => setModal(true)}>
+            Add Expense
+          </button>
+        </div>
       </div>
 
       <div className="dashboardFilter">
@@ -541,6 +786,90 @@ export default function Finance({ refreshKey, refresh }) {
 
             <button className="primary">Save Expense</button>
           </form>
+        </Modal>
+      )}
+
+      {exportModal && (
+        <Modal title="Export Stock to Excel" onClose={() => setExportModal(false)}>
+          <div className="form">
+            <p style={{ margin: 0, color: 'var(--muted)' }}>
+              Select the categories you want to include in the Excel export. The file will group products by category, show category totals, and end with a grand total row.
+            </p>
+
+            <label className="checkboxRow" style={{
+              background: 'var(--soft)',
+              border: '1px solid #b9ebc9',
+              borderRadius: '14px',
+              padding: '12px 14px',
+              margin: 0,
+            }}>
+              <input
+                type="checkbox"
+                checked={allCategoriesSelected}
+                onChange={(e) => handleSelectAll(e.target.checked)}
+              />
+              <span style={{ color: 'var(--greenDark)' }}>
+                Select All Categories {categories.length > 0 && `(${categories.length})`}
+              </span>
+            </label>
+
+            <div style={{
+              border: '1px solid var(--line)',
+              borderRadius: '16px',
+              padding: '8px',
+              maxHeight: '320px',
+              overflow: 'auto',
+              display: 'grid',
+              gap: '4px',
+            }}>
+              {categories.length === 0 && (
+                <p style={{ margin: '12px', color: 'var(--muted)', textAlign: 'center' }}>
+                  No categories available.
+                </p>
+              )}
+              {categories.map((c) => {
+                const catProducts = products.filter((p) => p.category_id === c.id);
+                return (
+                  <label
+                    key={c.id}
+                    className="permissionCheck"
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedCategories[c.id])}
+                      onChange={() => handleToggleCategory(c.id)}
+                    />
+                    <span>
+                      {c.name}
+                      <small style={{ color: 'var(--muted)', marginLeft: '6px' }}>
+                        ({catProducts.length} product{catProducts.length === 1 ? '' : 's'})
+                      </small>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="modalActions">
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => setExportModal(false)}
+                disabled={exporting}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary"
+                type="button"
+                onClick={exportStockToExcel}
+                disabled={exporting || selectedCount === 0}
+              >
+                {exporting ? 'Exporting...' : `Export${selectedCount > 0 ? ` (${selectedCount})` : ''}`}
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>
