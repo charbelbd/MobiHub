@@ -18,13 +18,16 @@ export default function Stock({ refreshKey, refresh }) {
   const [deleteCategory, setDeleteCategory] = useState(null);
   const [categorySearch, setCategorySearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const load = () =>
-    Promise.all([api.listCategories(), api.listProducts()]).then(([c, p]) => {
+  const load = () => {
+    setLoading(true);
+    return Promise.all([api.listCategories(), api.listProducts()]).then(([c, p]) => {
       setCategories(c);
       setProducts(p);
       setActive(a => a || c[0]?.id || '');
-    });
+    }).finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     load();
@@ -299,7 +302,12 @@ export default function Stock({ refreshKey, refresh }) {
                   </tr>
                 ))}
 
-                {!rows.length && (
+                {loading && (
+                  <tr>
+                    <td colSpan="8" className="emptyCell">Loading...</td>
+                  </tr>
+                )}
+                {!loading && !rows.length && (
                   <tr>
                     <td colSpan="8" className="emptyCell">
                       {normalizedProductSearch ? 'No products match this search.' : 'No products inside this category yet.'}

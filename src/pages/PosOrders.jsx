@@ -23,6 +23,7 @@ export default function PosOrders({ refreshKey, refresh }) {
   const [orders, setOrders] = useState([]);
   const [items, setItems] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [paid, setPaid] = useState('all');
   const [range, setRange] = useState('day');
   const [detail, setDetail] = useState(null);
@@ -32,12 +33,14 @@ export default function PosOrders({ refreshKey, refresh }) {
   const [to, setTo] = useState('');
   const [clientSearch, setClientSearch] = useState('');
 
-  const load = () =>
-    Promise.all([api.listPosOrders(), api.listPosOrderItems(), api.listPosPayments()]).then(([o, i, p]) => {
+  const load = () => {
+    setLoading(true);
+    return Promise.all([api.listPosOrders(), api.listPosOrderItems(), api.listPosPayments()]).then(([o, i, p]) => {
       setOrders(o);
       setItems(i);
       setPayments(p);
-    });
+    }).finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     load();
@@ -255,7 +258,7 @@ export default function PosOrders({ refreshKey, refresh }) {
             {!filtered.length && (
               <tr>
                 <td colSpan="11" className="emptyCell">
-                  No POS orders match the selected filters.
+                  {loading ? 'Loading orders...' : 'No POS orders match the selected filters.'}
                 </td>
               </tr>
             )}

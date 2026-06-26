@@ -22,9 +22,11 @@ export default function Suppliers({ refreshKey, refresh }) {
   const [detail, setDetail] = useState(null);
   const [filter, setFilter] = useState('day');
   const [cancelOrder, setCancelOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const load = () =>
-    Promise.all([
+  const load = () => {
+    setLoading(true);
+    return Promise.all([
       api.listCategories(),
       api.listProducts(),
       api.listSuppliers(),
@@ -38,7 +40,8 @@ export default function Suppliers({ refreshKey, refresh }) {
       setRelations(r);
       setOrders(o);
       setItems(i);
-    });
+    }).finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     load();
@@ -296,7 +299,13 @@ export default function Suppliers({ refreshKey, refresh }) {
                   </tr>
                 ))}
 
-            {tab === 'suppliers' && !suppliers.length && (
+            {loading && (
+              <tr>
+                <td colSpan="7" className="emptyCell">Loading...</td>
+              </tr>
+            )}
+
+            {!loading && tab === 'suppliers' && !suppliers.length && (
               <tr>
                 <td colSpan="5" className="emptyCell">
                   No suppliers yet.
@@ -304,7 +313,7 @@ export default function Suppliers({ refreshKey, refresh }) {
               </tr>
             )}
 
-            {tab === 'orders' && !filteredOrders.length && (
+            {!loading && tab === 'orders' && !filteredOrders.length && (
               <tr>
                 <td colSpan="7" className="emptyCell">
                   No supplier orders match the selected filter.

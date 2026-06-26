@@ -245,6 +245,7 @@ export default function Finance({ refreshKey, refresh }) {
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [metricFilter, setMetricFilter] = useState('day');
   const [expenseFilter, setExpenseFilter] = useState('day');
   const [chartFilter, setChartFilter] = useState('day');
@@ -259,8 +260,9 @@ export default function Finance({ refreshKey, refresh }) {
   const [expenseCustom, setExpenseCustom] = useState({ from: today, to: today });
   const [chartCustom, setChartCustom] = useState({ from: today, to: today });
 
-  const load = () =>
-    Promise.all([
+  const load = () => {
+    setLoading(true);
+    return Promise.all([
       api.listPosOrders(),
       api.listPosOrderItems(),
       api.listPosPayments(),
@@ -276,7 +278,8 @@ export default function Finance({ refreshKey, refresh }) {
       setExpenses(e);
       setCategories(c);
       setProducts(pr);
-    });
+    }).finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     load();
@@ -637,6 +640,14 @@ export default function Finance({ refreshKey, refresh }) {
         </div>
       </div>
 
+      {loading && (
+        <div style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
+          Loading financial data...
+        </div>
+      )}
+
+      {!loading && <>
+
       <div className="dashboardFilter">
         <div>
           <b>Revenue & Profit Filter</b>
@@ -822,7 +833,12 @@ export default function Finance({ refreshKey, refresh }) {
               display: 'grid',
               gap: '4px',
             }}>
-              {categories.length === 0 && (
+              {loading && (
+                <p style={{ margin: '12px', color: 'var(--muted)', textAlign: 'center' }}>
+                  Loading...
+                </p>
+              )}
+              {!loading && categories.length === 0 && (
                 <p style={{ margin: '12px', color: 'var(--muted)', textAlign: 'center' }}>
                   No categories available.
                 </p>
@@ -872,6 +888,7 @@ export default function Finance({ refreshKey, refresh }) {
           </div>
         </Modal>
       )}
+      </>}
     </div>
   );
 }
