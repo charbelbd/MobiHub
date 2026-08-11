@@ -39,6 +39,8 @@ export default function PosOrders({ refreshKey, refresh }) {
       setOrders(o);
       setItems(i);
       setPayments(p);
+    }).catch(err => {
+      toast(err.message || 'Could not load POS orders', 'error');
     }).finally(() => setLoading(false));
   };
 

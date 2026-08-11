@@ -41,26 +41,11 @@ function cleanProductRow(row) {
 }
 
 
-function localPaymentKey() {
-  return 'mobihub_pos_payments';
-}
-
-function listLocalPayments() {
-  if (typeof window === 'undefined') return clone(mem.pos_payments || []);
-  try { return JSON.parse(window.localStorage.getItem(localPaymentKey()) || '[]'); }
-  catch { return []; }
-}
-
-function saveLocalPayments(rows) {
-  if (typeof window === 'undefined') { mem.pos_payments = rows; return; }
-  window.localStorage.setItem(localPaymentKey(), JSON.stringify(rows));
-}
-
 async function listPaymentRows() {
   if (!supabaseConfigured) { await wait(); return clone(mem.pos_payments || []); }
   const { data, error } = await supabase.from('pos_payments').select('*').order('payment_date', { ascending: false });
-  if (!error) return data || [];
-  return listLocalPayments();
+  if (error) throw new Error(`Failed to load payments: ${error.message}`);
+  return data || [];
 }
 
 async function insertPaymentRow(row) {
@@ -81,12 +66,8 @@ async function insertPaymentRow(row) {
   }
 
   const { data, error } = await supabase.from('pos_payments').insert(payment).select().single();
-  if (!error) return data;
-
-  const rows = listLocalPayments();
-  rows.unshift(payment);
-  saveLocalPayments(rows);
-  return payment;
+  if (error) throw new Error(`Failed to save payment: ${error.message}`);
+  return data;
 }
 
 async function deletePaymentRowsForOrder(orderId) {
@@ -96,9 +77,7 @@ async function deletePaymentRowsForOrder(orderId) {
   }
 
   const { error } = await supabase.from('pos_payments').delete().eq('pos_order_id', orderId);
-  if (error) {
-    saveLocalPayments(listLocalPayments().filter(p => p.pos_order_id !== orderId));
-  }
+  if (error) throw new Error(`Failed to remove payments for order: ${error.message}`);
   return true;
 }
 

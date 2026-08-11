@@ -120,8 +120,12 @@ export default function POS({ refresh }) {
   const submit = async (paid) => {
     if (!cart.length) return toast('Add products before submitting an order', 'error');
     const orderItems = allocateDiscountedProfit(cart, discountValue).map(i => ({ product_id: i.product_id, product_name: i.name, unit_price: i.price, profit_price: i.profit_price, quantity: i.quantity, total_price: i.price * i.quantity, total_profit: i.total_profit }));
-    await api.createPosOrder({ client_name: clientName || null, subtotal, discount_type: discountType, discount_value: Number(discount || 0), total_price: total, total_profit: discountedProfit, paid }, orderItems);
-    setCart([]); setDiscount(0); setClientName(''); refresh(); toast(paid ? 'Order submitted successfully' : 'Order saved as Not Paid');
+    try {
+      await api.createPosOrder({ client_name: clientName || null, subtotal, discount_type: discountType, discount_value: Number(discount || 0), total_price: total, total_profit: discountedProfit, paid }, orderItems);
+      setCart([]); setDiscount(0); setClientName(''); refresh(); toast(paid ? 'Order submitted successfully' : 'Order saved as Not Paid');
+    } catch (err) {
+      toast(err.message || 'Could not submit order', 'error');
+    }
   };
 
   return <div className="pageGrid posGrid"><section><div className="pageHeader"><div><h1>POS</h1><p>Scan barcodes, search products, and create orders. POS prices include product profit.</p></div></div>

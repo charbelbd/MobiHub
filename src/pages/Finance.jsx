@@ -278,6 +278,8 @@ export default function Finance({ refreshKey, refresh }) {
       setExpenses(e);
       setCategories(c);
       setProducts(pr);
+    }).catch(err => {
+      toast(err.message || 'Could not load finance data', 'error');
     }).finally(() => setLoading(false));
   };
 
