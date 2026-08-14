@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { money } from '../lib/utils';
 import { basePrice, discountedTotals, lineProfitTotal, lineTotal, profitPrice } from '../lib/pricing';
 import { useToast } from '../components/ToastProvider';
+import { useBusyGuard } from '../lib/useBusyGuard';
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const endOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
@@ -450,21 +451,26 @@ export default function Finance({ refreshKey, refresh }) {
     return rows;
   }, [paymentEvents, chartFilter, chartCustom]);
 
-  const saveExpense = async (e) => {
+  const [savingExpense, guardSaveExpense] = useBusyGuard();
+  const saveExpense = guardSaveExpense(async (e) => {
     e.preventDefault();
 
     const f = new FormData(e.currentTarget);
 
-    await api.createExpense({
-      description: f.get('description'),
-      price: Number(f.get('price')),
-    });
+    try {
+      await api.createExpense({
+        description: f.get('description'),
+        price: Number(f.get('price')),
+      });
 
-    setModal(false);
-    load();
-    refresh();
-    toast('Expense added successfully');
-  };
+      setModal(false);
+      await load();
+      refresh();
+      toast('Expense added successfully');
+    } catch (err) {
+      toast(err.message || 'Could not add expense', 'error');
+    }
+  });
 
   const allCategoriesSelected = useMemo(
     () => categories.length > 0 && categories.every((c) => selectedCategories[c.id]),
@@ -797,7 +803,7 @@ export default function Finance({ refreshKey, refresh }) {
               />
             </label>
 
-            <button className="primary">Save Expense</button>
+            <button className="primary" disabled={savingExpense}>{savingExpense ? 'Saving...' : 'Save Expense'}</button>
           </form>
         </Modal>
       )}

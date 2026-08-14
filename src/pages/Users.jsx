@@ -4,6 +4,7 @@ import Modal from '../components/Modal';
 import { api } from '../lib/api';
 import { ALL_PERMISSION_IDS, PAGE_PERMISSIONS, permissionLabel, normalizePermissions } from '../lib/permissions';
 import { useToast } from '../components/ToastProvider';
+import { useBusyGuard } from '../lib/useBusyGuard';
 
 const emptyForm = {
   name: '',
@@ -58,7 +59,8 @@ export default function Users({ refreshKey, refresh, currentUserAccess }) {
     });
   };
 
-  const saveUser = async (e) => {
+  const [savingUser, guardSaveUser] = useBusyGuard();
+  const saveUser = guardSaveUser(async (e) => {
     e.preventDefault();
     try {
       const payload = {
@@ -86,9 +88,10 @@ export default function Users({ refreshKey, refresh, currentUserAccess }) {
     } catch (err) {
       toast(err.message, 'error');
     }
-  };
+  });
 
-  const deleteUser = async (user) => {
+  const [deletingUser, guardDeleteUser] = useBusyGuard();
+  const deleteUser = guardDeleteUser(async (user) => {
     if (currentUserAccess?.id === user.id) {
       toast('You cannot delete your own admin user while logged in.', 'error');
       return;
@@ -99,7 +102,7 @@ export default function Users({ refreshKey, refresh, currentUserAccess }) {
       toast('User deleted.');
       refresh();
     } catch (err) { toast(err.message, 'error'); }
-  };
+  });
 
   return <>
     <header className="pageHeader">
@@ -136,7 +139,7 @@ export default function Users({ refreshKey, refresh, currentUserAccess }) {
               <td>
                 <div className="rowActions">
                   <button className="ghost" onClick={() => openEdit(user)}><Pencil size={16}/> Edit</button>
-                  <button className="ghost dangerText" onClick={() => deleteUser(user)}><Trash2 size={16}/> Delete</button>
+                  <button className="ghost dangerText" disabled={deletingUser} onClick={() => deleteUser(user)}><Trash2 size={16}/> Delete</button>
                 </div>
               </td>
             </tr>;
@@ -194,7 +197,7 @@ export default function Users({ refreshKey, refresh, currentUserAccess }) {
 
         <div className="modalActions">
           <button type="button" className="ghost" onClick={() => setModal(null)}>Cancel</button>
-          <button className="primary">Save User</button>
+          <button className="primary" disabled={savingUser}>{savingUser ? 'Saving...' : 'Save User'}</button>
         </div>
       </form>
     </Modal>}

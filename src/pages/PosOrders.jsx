@@ -3,6 +3,7 @@ import Modal from '../components/Modal';
 import { api } from '../lib/api';
 import { formatDate, money } from '../lib/utils';
 import { useToast } from '../components/ToastProvider';
+import { useBusyGuard } from '../lib/useBusyGuard';
 
 const discountLabel = o =>
   Number(o.discount_value || 0)
@@ -105,7 +106,8 @@ export default function PosOrders({ refreshKey, refresh }) {
     return true;
   });
 
-  const savePayment = async e => {
+  const [savingPayment, guardSavePayment] = useBusyGuard();
+  const savePayment = guardSavePayment(async e => {
     e.preventDefault();
     if (!paymentOrder) return;
 
@@ -124,9 +126,10 @@ export default function PosOrders({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Could not save payment', 'error');
     }
-  };
+  });
 
-  const confirmDelete = async () => {
+  const [deleting, guardDelete] = useBusyGuard();
+  const confirmDelete = guardDelete(async () => {
     if (!deleteOrder) return;
 
     try {
@@ -138,7 +141,7 @@ export default function PosOrders({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Could not delete POS order', 'error');
     }
-  };
+  });
 
   return (
     <div>
@@ -340,7 +343,7 @@ export default function PosOrders({ refreshKey, refresh }) {
               Note
               <input name="note" placeholder="Optional note" />
             </label>
-            <button className="primary">Save Payment</button>
+            <button className="primary" disabled={savingPayment}>{savingPayment ? 'Saving...' : 'Save Payment'}</button>
           </form>
         </Modal>
       )}
@@ -355,8 +358,8 @@ export default function PosOrders({ refreshKey, refresh }) {
               <button className="ghost" onClick={() => setDeleteOrder(null)}>
                 Keep Order
               </button>
-              <button className="primary dangerButton" onClick={confirmDelete}>
-                Delete & Restore Stock
+              <button className="primary dangerButton" disabled={deleting} onClick={confirmDelete}>
+                {deleting ? 'Deleting...' : 'Delete & Restore Stock'}
               </button>
             </div>
           </div>

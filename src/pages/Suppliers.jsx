@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatDate, money } from '../lib/utils';
 import { finalPrice, profitPrice } from '../lib/pricing';
 import { useToast } from '../components/ToastProvider';
+import { useBusyGuard } from '../lib/useBusyGuard';
 
 export default function Suppliers({ refreshKey, refresh }) {
   const toast = useToast();
@@ -47,7 +48,8 @@ export default function Suppliers({ refreshKey, refresh }) {
     load();
   }, [refreshKey]);
 
-  const saveSupplier = async e => {
+  const [savingSupplier, guardSaveSupplier] = useBusyGuard();
+  const saveSupplier = guardSaveSupplier(async e => {
     e.preventDefault();
 
     const f = new FormData(e.currentTarget);
@@ -74,9 +76,10 @@ export default function Suppliers({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Supplier action failed', 'error');
     }
-  };
+  });
 
-  const confirmDeleteSupplier = async () => {
+  const [deletingSupplier, guardDeleteSupplier] = useBusyGuard();
+  const confirmDeleteSupplier = guardDeleteSupplier(async () => {
     if (!deleteSupplier) return;
 
     try {
@@ -88,9 +91,10 @@ export default function Suppliers({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Could not delete supplier', 'error');
     }
-  };
+  });
 
-  const saveOrder = async e => {
+  const [savingOrder, guardSaveOrder] = useBusyGuard();
+  const saveOrder = guardSaveOrder(async e => {
     e.preventDefault();
 
     const f = new FormData(e.currentTarget);
@@ -125,9 +129,12 @@ export default function Suppliers({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Could not create supplier order', 'error');
     }
-  };
+  });
 
+  const [markingArrivedId, setMarkingArrivedId] = useState(null);
   const markArrived = async o => {
+    if (markingArrivedId) return;
+    setMarkingArrivedId(o.id);
     try {
       for (const it of items.filter(i => i.supplier_order_id === o.id)) {
         await api.updateProductStock(it.product_id, Number(it.quantity));
@@ -143,10 +150,13 @@ export default function Suppliers({ refreshKey, refresh }) {
       toast('Supplier order marked as arrived');
     } catch (err) {
       toast(err.message || 'Could not mark supplier order as arrived', 'error');
+    } finally {
+      setMarkingArrivedId(null);
     }
   };
 
-  const cancelConfirmed = async () => {
+  const [cancelling, guardCancel] = useBusyGuard();
+  const cancelConfirmed = guardCancel(async () => {
     if (!cancelOrder) return;
 
     try {
@@ -158,7 +168,7 @@ export default function Suppliers({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Could not cancel supplier order', 'error');
     }
-  };
+  });
 
   const filteredOrders = orders.filter(o => {
     const d = new Date(o.created_at);
@@ -275,11 +285,11 @@ export default function Suppliers({ refreshKey, refresh }) {
                     <td>{money(o.total_price)}</td>
                     <td>
                       <button
-                        disabled={o.status === 'arrived'}
+                        disabled={o.status === 'arrived' || markingArrivedId === o.id}
                         className="secondary"
                         onClick={() => markArrived(o)}
                       >
-                        {o.status === 'arrived' ? 'Arrived' : 'Mark as Arrived'}
+                        {o.status === 'arrived' ? 'Arrived' : markingArrivedId === o.id ? 'Saving...' : 'Mark as Arrived'}
                       </button>
                     </td>
                     <td>
@@ -334,6 +344,7 @@ export default function Suppliers({ refreshKey, refresh }) {
             setEditingSupplier(null);
           }}
           onSubmit={saveSupplier}
+          saving={savingSupplier}
         />
       )}
 
@@ -344,6 +355,7 @@ export default function Suppliers({ refreshKey, refresh }) {
             setLines([]);
           }}
           saveOrder={saveOrder}
+          savingOrder={savingOrder}
           suppliers={suppliers}
           relations={relations}
           categories={categories}
@@ -384,8 +396,8 @@ export default function Suppliers({ refreshKey, refresh }) {
               <button className="ghost" onClick={() => setCancelOrder(null)}>
                 Keep Order
               </button>
-              <button className="primary dangerButton" onClick={cancelConfirmed}>
-                Cancel Order
+              <button className="primary dangerButton" disabled={cancelling} onClick={cancelConfirmed}>
+                {cancelling ? 'Cancelling...' : 'Cancel Order'}
               </button>
             </div>
           </div>
@@ -406,8 +418,8 @@ export default function Suppliers({ refreshKey, refresh }) {
                 Keep Supplier
               </button>
 
-              <button className="primary dangerButton" onClick={confirmDeleteSupplier}>
-                Delete Supplier
+              <button className="primary dangerButton" disabled={deletingSupplier} onClick={confirmDeleteSupplier}>
+                {deletingSupplier ? 'Deleting...' : 'Delete Supplier'}
               </button>
             </div>
           </div>
@@ -417,7 +429,7 @@ export default function Suppliers({ refreshKey, refresh }) {
   );
 }
 
-function SupplierModal({ supplier, categories, relations, onClose, onSubmit }) {
+function SupplierModal({ supplier, categories, relations, onClose, onSubmit, saving }) {
   const selected = relations.filter(r => r.supplier_id === supplier?.id).map(r => r.category_id);
 
   return (
@@ -449,7 +461,7 @@ function SupplierModal({ supplier, categories, relations, onClose, onSubmit }) {
           <input name="phone_number" defaultValue={supplier?.phone_number || ''} placeholder="Phone number" />
         </label>
 
-        <button className="primary">Save Supplier</button>
+        <button className="primary" disabled={saving}>{saving ? 'Saving...' : 'Save Supplier'}</button>
       </form>
     </Modal>
   );
@@ -458,6 +470,7 @@ function SupplierModal({ supplier, categories, relations, onClose, onSubmit }) {
 function OrderModal({
   onClose,
   saveOrder,
+  savingOrder,
   suppliers,
   relations,
   categories,
@@ -532,7 +545,8 @@ function OrderModal({
     setApplyProfit(false);
   };
 
-  const saveCategory = async e => {
+  const [savingCategory, guardSaveCategory] = useBusyGuard();
+  const saveCategory = guardSaveCategory(async e => {
     e.preventDefault();
 
     try {
@@ -558,9 +572,10 @@ function OrderModal({
     } catch (err) {
       toast(err.message || 'Could not create subproduct', 'error');
     }
-  };
+  });
 
-  const saveProduct = async e => {
+  const [savingProduct, guardSaveProduct] = useBusyGuard();
+  const saveProduct = guardSaveProduct(async e => {
     e.preventDefault();
 
     if (!cat) {
@@ -588,7 +603,7 @@ function OrderModal({
     } catch (err) {
       toast(err.message || 'Could not create product', 'error');
     }
-  };
+  });
 
   return (
     <Modal title="Add Supplier Order" onClose={onClose} wide>
@@ -734,7 +749,7 @@ function OrderModal({
           <b>{money(orderTotal)}</b>
         </div>
 
-        <button className="primary">Save Order</button>
+        <button className="primary" disabled={savingOrder}>{savingOrder ? 'Saving...' : 'Save Order'}</button>
       </form>
 
       {subModal === 'category' && (
@@ -750,7 +765,7 @@ function OrderModal({
               <textarea name="description" placeholder="Description" />
             </label>
 
-            <button className="primary">Save Subproduct</button>
+            <button className="primary" disabled={savingCategory}>{savingCategory ? 'Saving...' : 'Save Subproduct'}</button>
           </form>
         </Modal>
       )}
@@ -788,7 +803,7 @@ function OrderModal({
               <input name="quantity" type="number" defaultValue="0" />
             </label>
 
-            <button className="primary">Save Product</button>
+            <button className="primary" disabled={savingProduct}>{savingProduct ? 'Saving...' : 'Save Product'}</button>
           </form>
         </Modal>
       )}

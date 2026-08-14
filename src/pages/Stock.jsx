@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { money } from '../lib/utils';
 import { finalPrice } from '../lib/pricing';
 import { useToast } from '../components/ToastProvider';
+import { useBusyGuard } from '../lib/useBusyGuard';
 
 export default function Stock({ refreshKey, refresh }) {
   const toast = useToast();
@@ -33,7 +34,8 @@ export default function Stock({ refreshKey, refresh }) {
     load();
   }, [refreshKey]);
 
-  const saveCategory = async e => {
+  const [savingCategory, guardSaveCategory] = useBusyGuard();
+  const saveCategory = guardSaveCategory(async e => {
     e.preventDefault();
 
     const f = new FormData(e.currentTarget);
@@ -59,9 +61,10 @@ export default function Stock({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Category action failed', 'error');
     }
-  };
+  });
 
-  const saveProduct = async e => {
+  const [savingProduct, guardSaveProduct] = useBusyGuard();
+  const saveProduct = guardSaveProduct(async e => {
     e.preventDefault();
 
     const f = new FormData(e.currentTarget);
@@ -96,9 +99,10 @@ export default function Stock({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Product action failed', 'error');
     }
-  };
+  });
 
-  const confirmDeleteProduct = async () => {
+  const [deletingProduct, guardDeleteProduct] = useBusyGuard();
+  const confirmDeleteProduct = guardDeleteProduct(async () => {
     try {
       await api.deleteProduct(deleteProduct.id);
       setDeleteProduct(null);
@@ -108,9 +112,10 @@ export default function Stock({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Could not delete product', 'error');
     }
-  };
+  });
 
-  const confirmDeleteCategory = async deleteProductsToo => {
+  const [deletingCategory, guardDeleteCategory] = useBusyGuard();
+  const confirmDeleteCategory = guardDeleteCategory(async deleteProductsToo => {
     try {
       await api.deleteCategory(deleteCategory.id, deleteProductsToo);
 
@@ -122,7 +127,7 @@ export default function Stock({ refreshKey, refresh }) {
     } catch (err) {
       toast(err.message || 'Could not delete category', 'error');
     }
-  };
+  });
 
   const filteredCategories = useMemo(
     () =>
@@ -348,8 +353,8 @@ export default function Stock({ refreshKey, refresh }) {
               />
             </label>
 
-            <button className="primary">
-              {editCategory ? 'Save Changes' : 'Save Category'}
+            <button className="primary" disabled={savingCategory}>
+              {savingCategory ? 'Saving...' : editCategory ? 'Save Changes' : 'Save Category'}
             </button>
           </form>
         </Modal>
@@ -427,8 +432,8 @@ export default function Stock({ refreshKey, refresh }) {
               />
             </label>
 
-            <button className="primary">
-              {editProduct ? 'Save Changes' : 'Save Product'}
+            <button className="primary" disabled={savingProduct}>
+              {savingProduct ? 'Saving...' : editProduct ? 'Save Changes' : 'Save Product'}
             </button>
           </form>
         </Modal>
@@ -444,8 +449,8 @@ export default function Stock({ refreshKey, refresh }) {
               <button className="ghost" onClick={() => setDeleteProduct(null)}>
                 Keep Product
               </button>
-              <button className="primary dangerButton" onClick={confirmDeleteProduct}>
-                Delete Product
+              <button className="primary dangerButton" disabled={deletingProduct} onClick={confirmDeleteProduct}>
+                {deletingProduct ? 'Deleting...' : 'Delete Product'}
               </button>
             </div>
           </div>
@@ -476,16 +481,18 @@ export default function Stock({ refreshKey, refresh }) {
               {products.filter(p => p.category_id === deleteCategory.id).length === 0 ? (
                 <button
                   className="primary dangerButton"
+                  disabled={deletingCategory}
                   onClick={() => confirmDeleteCategory(false)}
                 >
-                  Delete Category
+                  {deletingCategory ? 'Deleting...' : 'Delete Category'}
                 </button>
               ) : (
                 <button
                   className="primary dangerButton"
+                  disabled={deletingCategory}
                   onClick={() => confirmDeleteCategory(true)}
                 >
-                  Delete Category & Products
+                  {deletingCategory ? 'Deleting...' : 'Delete Category & Products'}
                 </button>
               )}
             </div>
