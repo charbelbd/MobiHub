@@ -41,11 +41,39 @@ function cleanProductRow(row) {
 }
 
 
+const SUPABASE_PAGE_SIZE = 1000;
+
+// Supabase/PostgREST caps a single select() response at SUPABASE_PAGE_SIZE rows.
+// This walks through the table in pages (using .range) and concatenates every
+// page, so tables with more rows than the default limit are never silently truncated.
+async function fetchAllRows(buildQuery) {
+  let allRows = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await buildQuery().range(from, to);
+    if (error) throw error;
+
+    const page = data || [];
+    allRows = allRows.concat(page);
+
+    if (page.length < SUPABASE_PAGE_SIZE) break;
+    from += SUPABASE_PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
 async function listPaymentRows() {
   if (!supabaseConfigured) { await wait(); return clone(mem.pos_payments || []); }
-  const { data, error } = await supabase.from('pos_payments').select('*').order('payment_date', { ascending: false });
-  if (error) throw new Error(`Failed to load payments: ${error.message}`);
-  return data || [];
+  try {
+    return await fetchAllRows(() =>
+      supabase.from('pos_payments').select('*').order('payment_date', { ascending: false })
+    );
+  } catch (error) {
+    throw new Error(`Failed to load payments: ${error.message}`);
+  }
 }
 
 async function insertPaymentRow(row) {
@@ -93,9 +121,7 @@ function cleanUserRow(row) {
 
 async function dbList(table, order = 'created_at') {
   if (!supabaseConfigured) { await wait(); return clone(mem[table] || []); }
-  const { data, error } = await supabase.from(table).select('*').order(order, { ascending: false });
-  if (error) throw error;
-  return data || [];
+  return fetchAllRows(() => supabase.from(table).select('*').order(order, { ascending: false }));
 }
 
 async function dbInsert(table, row) {
