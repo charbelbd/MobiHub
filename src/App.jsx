@@ -82,7 +82,7 @@ export default function App() {
         {page === 'pos' && canAccess(access, 'pos') && <POS {...props}/>} 
         {page === 'stock' && canAccess(access, 'stock') && <Stock {...props}/>} 
         {page === 'suppliers' && canAccess(access, 'suppliers') && <Suppliers {...props}/>} 
-        {page === 'orders' && canAccess(access, 'orders') && <PosOrders {...props}/>} 
+        {page === 'orders' && canAccess(access, 'orders') && <PosOrders {...props} currentUserAccess={access}/>} 
         {page === 'finance' && canAccess(access, 'finance') && <Finance {...props}/>} 
         {page === 'users' && canAccess(access, 'users') && <Users {...props} currentUserAccess={access}/>} 
       </section>
