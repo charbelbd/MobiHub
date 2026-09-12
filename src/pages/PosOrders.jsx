@@ -83,7 +83,7 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
 
   const [exportModal, setExportModal] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [exportPaidFilter, setExportPaidFilter] = useState('all');
+  const [exportPaidFilter, setExportPaidFilter] = useState({ paid: true, partial: true, unpaid: true });
   const [exportMonths, setExportMonths] = useState({});
 
   const load = () => {
@@ -144,11 +144,13 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
     const initial = {};
     availableMonths.forEach(m => { initial[m.key] = true; });
     setExportMonths(initial);
-    setExportPaidFilter('all');
+    setExportPaidFilter({ paid: true, partial: true, unpaid: true });
     setExportModal(true);
   };
 
   const toggleExportMonth = key => setExportMonths(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const toggleExportStatus = status => setExportPaidFilter(prev => ({ ...prev, [status]: !prev[status] }));
 
   const allExportMonthsSelected =
     availableMonths.length > 0 && availableMonths.every(m => exportMonths[m.key]);
@@ -161,7 +163,7 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
 
   const monthOrderCount = key =>
     orders.filter(
-      o => monthKeyOf(o.created_at) === key && (exportPaidFilter === 'all' || statusFor(o) === exportPaidFilter)
+      o => monthKeyOf(o.created_at) === key && exportPaidFilter[statusFor(o)]
     ).length;
 
   const selectedMonthCount = availableMonths.filter(m => exportMonths[m.key]).length;
@@ -174,6 +176,12 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
       return;
     }
 
+    const selectedStatuses = Object.keys(exportPaidFilter).filter(s => exportPaidFilter[s]);
+    if (!selectedStatuses.length) {
+      toast('Please select at least one payment status to export', 'error');
+      return;
+    }
+
     setExporting(true);
 
     try {
@@ -182,7 +190,7 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
           const monthOrders = orders
             .filter(o => {
               if (monthKeyOf(o.created_at) !== key) return false;
-              if (exportPaidFilter !== 'all' && statusFor(o) !== exportPaidFilter) return false;
+              if (!exportPaidFilter[statusFor(o)]) return false;
               return true;
             })
             .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -707,15 +715,50 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
               color-coded by payment status.
             </p>
 
-            <label>
-              Payment status
-              <select value={exportPaidFilter} onChange={e => setExportPaidFilter(e.target.value)}>
-                <option value="all">All</option>
-                <option value="paid">Paid</option>
-                <option value="partial">Partially Paid</option>
-                <option value="unpaid">Not Paid</option>
-              </select>
-            </label>
+            <div>
+              <label style={{ marginBottom: '8px' }}>Payment status</label>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                }}
+              >
+                <label
+                  className="permissionCheck"
+                  style={{ cursor: 'pointer', flex: '1 1 140px', margin: 0 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportPaidFilter.paid)}
+                    onChange={() => toggleExportStatus('paid')}
+                  />
+                  <span>Paid</span>
+                </label>
+                <label
+                  className="permissionCheck"
+                  style={{ cursor: 'pointer', flex: '1 1 140px', margin: 0 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportPaidFilter.partial)}
+                    onChange={() => toggleExportStatus('partial')}
+                  />
+                  <span>Partially Paid</span>
+                </label>
+                <label
+                  className="permissionCheck"
+                  style={{ cursor: 'pointer', flex: '1 1 140px', margin: 0 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportPaidFilter.unpaid)}
+                    onChange={() => toggleExportStatus('unpaid')}
+                  />
+                  <span>Not Paid</span>
+                </label>
+              </div>
+            </div>
 
             <label
               className="checkboxRow"
@@ -781,7 +824,7 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
                 className="primary"
                 type="button"
                 onClick={exportOrdersToExcel}
-                disabled={exporting || selectedMonthCount === 0}
+                disabled={exporting || selectedMonthCount === 0 || !Object.values(exportPaidFilter).some(Boolean)}
               >
                 {exporting ? 'Exporting...' : `Export${selectedMonthCount > 0 ? ` (${selectedMonthCount})` : ''}`}
               </button>

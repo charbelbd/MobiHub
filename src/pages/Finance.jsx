@@ -765,7 +765,7 @@ export default function Finance({ refreshKey, refresh }) {
                 <td>Supplier order</td>
                 <td>{o.order_code}</td>
                 <td>{o.supplier_name}</td>
-                <td>{new Date(o.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+                <td>{new Date(o.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</td>
                 <td>{money(o.total_price)}</td>
               </tr>
             ))}
@@ -775,7 +775,7 @@ export default function Finance({ refreshKey, refresh }) {
                 <td>Manual expense</td>
                 <td>{e.expense_code}</td>
                 <td>{e.description}</td>
-                <td>{new Date(e.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+                <td>{new Date(e.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</td>
                 <td>{money(e.price)}</td>
               </tr>
             ))}
