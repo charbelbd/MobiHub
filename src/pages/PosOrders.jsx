@@ -69,7 +69,7 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
   const canDeleteOrders = String(currentUserAccess?.username || '').trim().toLowerCase() === 'boss@badboy.com';
 
   const [orders, setOrders] = useState([]);
-  const [items, setItems] = useState([]);
+  const [detailItems, setDetailItems] = useState(null);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [paid, setPaid] = useState('all');
@@ -88,9 +88,8 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
 
   const load = () => {
     setLoading(true);
-    return Promise.all([api.listPosOrders(), api.listPosOrderItems(), api.listPosPayments()]).then(([o, i, p]) => {
+    return Promise.all([api.listPosOrders(), api.listPosPayments()]).then(([o, p]) => {
       setOrders(o);
-      setItems(i);
       setPayments(p);
     }).catch(err => {
       toast(err.message || 'Could not load POS orders', 'error');
@@ -100,6 +99,22 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
   useEffect(() => {
     load();
   }, [refreshKey]);
+
+  // Order items are only shown in the details modal, so they are loaded per order
+  // when it opens instead of downloading every item for every order up front.
+  useEffect(() => {
+    if (!detail) return;
+    let cancelled = false;
+    setDetailItems(null);
+    api.listPosOrderItemsForOrders([detail.id])
+      .then(rows => { if (!cancelled) setDetailItems(rows); })
+      .catch(err => {
+        if (cancelled) return;
+        setDetailItems([]);
+        toast(err.message || 'Could not load order items', 'error');
+      });
+    return () => { cancelled = true; };
+  }, [detail?.id]);
 
   const paidByOrder = useMemo(() => {
     const map = {};
@@ -611,8 +626,8 @@ export default function PosOrders({ refreshKey, refresh, currentUserAccess }) {
           <div className="orderDetailSection">
             <h4>Items</h4>
             <div className="orderItemsList">
-              {items
-                .filter(i => i.pos_order_id === detail.id)
+              {detailItems === null && <p className="emptyCell">Loading items...</p>}
+              {(detailItems || [])
                 .map(i => (
                   <div className="orderItemRow" key={i.id}>
                     <span className="orderItemName">{i.product_name}</span>

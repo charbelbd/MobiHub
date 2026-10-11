@@ -165,6 +165,24 @@ async function dbListWhere(table, column, value) {
   return fetchAllRows((opts) => supabase.from(table).select('*', opts).eq(column, value).order('id'));
 }
 
+// Rows whose column matches any of the values, cached like dbList.
+// Values are sent in chunks to keep request URLs short.
+async function dbListWhereIn(table, column, values) {
+  if (!values.length) return [];
+  if (!supabaseConfigured) {
+    const wanted = new Set(values);
+    return clone(mem[table].filter(x => wanted.has(x[column])));
+  }
+  return cachedList(`${table}:${column}:in:${values.join(',')}`, async () => {
+    const chunks = [];
+    for (let i = 0; i < values.length; i += 100) chunks.push(values.slice(i, i + 100));
+    const pages = await Promise.all(chunks.map(ids =>
+      fetchAllRows((opts) => supabase.from(table).select('*', opts).in(column, ids).order('id'))
+    ));
+    return pages.flat();
+  });
+}
+
 async function dbDeleteWhere(table, column, value) {
   if (!supabaseConfigured) { mem[table] = mem[table].filter(x => x[column] !== value); return true; }
   const { error } = await supabase.from(table).delete().eq(column, value);
@@ -331,6 +349,7 @@ export const api = {
 
   listPosOrders: () => dbList('pos_orders', 'created_at'),
   listPosOrderItems: () => dbList('pos_order_items', 'created_at'),
+  listPosOrderItemsForOrders: (orderIds) => dbListWhereIn('pos_order_items', 'pos_order_id', orderIds),
   createPosOrder: async (order, items) => {
     const created = await dbInsert('pos_orders', { ...order, order_code: order.order_code || idCode('POS'), paid_at: order.paid ? now() : null });
     for (const item of items) {

@@ -265,13 +265,19 @@ export default function Finance({ refreshKey, refresh }) {
     setLoading(true);
     return Promise.all([
       api.listPosOrders(),
-      api.listPosOrderItems(),
       api.listPosPayments(),
       api.listSupplierOrders(),
       api.listExpenses(),
       api.listCategories(),
       api.listProducts(),
-    ]).then(([o, i, p, so, e, c, pr]) => {
+    ]).then(async ([o, p, so, e, c, pr]) => {
+      // Items are only needed to work out profit for older orders saved without
+      // total_profit, so only those orders' items are downloaded.
+      const legacyOrderIds = o
+        .filter((x) => x.total_profit === undefined || x.total_profit === null || !Number.isFinite(Number(x.total_profit)))
+        .map((x) => x.id);
+      const i = await api.listPosOrderItemsForOrders(legacyOrderIds);
+
       setOrders(o);
       setItems(i);
       setPayments(p);
