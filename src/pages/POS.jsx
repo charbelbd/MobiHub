@@ -6,7 +6,7 @@ import { allocateDiscountedProfit, discountedTotals, finalPrice, lineProfitTotal
 import { useToast } from '../components/ToastProvider';
 import { useBusyGuard } from '../lib/useBusyGuard';
 
-export default function POS({ refresh }) {
+export default function POS({ refreshKey, refresh }) {
   const toast = useToast();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +19,7 @@ export default function POS({ refresh }) {
   useEffect(() => {
     setLoading(true);
     api.listProducts().then(setProducts).finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   const availableStock = (productId) => Number(products.find(p => p.id === productId)?.quantity || 0);
 
@@ -49,6 +49,11 @@ export default function POS({ refresh }) {
     setQty(1); setSearch('');
   };
 
+  // The scanner listener below is only re-registered when products change, so it
+  // calls addProduct through a ref to always see the current cart and quantity.
+  const addProductRef = useRef(addProduct);
+  addProductRef.current = addProduct;
+
   useEffect(() => {
     const scannerMaxGapMs = 50;
     const scannerMinLength = 3;
@@ -73,7 +78,7 @@ export default function POS({ refresh }) {
           const product = products.find(p => String(p.barcode || '').trim() === barcode);
           e.preventDefault();
           e.stopPropagation();
-          if (product) addProduct(product);
+          if (product) addProductRef.current(product);
           else toast(`No product found for barcode ${barcode}`, 'error');
         }
 
@@ -104,7 +109,7 @@ export default function POS({ refresh }) {
 
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [products, qty]);
+  }, [products]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredProducts = products.filter(p => {

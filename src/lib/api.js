@@ -3,8 +3,17 @@ import { supabase, supabaseConfigured } from './supabase';
 import { idCode } from './utils';
 import { ALL_PERMISSION_IDS, normalizePermissions } from './permissions';
 
+// Used only to sign up new users. It must not store or broadcast its session,
+// otherwise signing up a user replaces the signed-in admin's session.
 const authAdminClient = supabaseConfigured
-  ? createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
+  ? createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: 'mobihub-signup-client'
+    }
+  })
   : null;
 
 const now = () => new Date().toISOString();
@@ -44,33 +53,50 @@ function cleanProductRow(row) {
 const SUPABASE_PAGE_SIZE = 1000;
 
 // Supabase/PostgREST caps a single select() response at SUPABASE_PAGE_SIZE rows.
-// This walks through the table in pages (using .range) and concatenates every
-// page, so tables with more rows than the default limit are never silently truncated.
+// The first request also returns the total row count, then all remaining pages
+// are requested at the same time instead of one after another.
 async function fetchAllRows(buildQuery) {
-  let allRows = [];
-  let from = 0;
+  const first = await buildQuery({ count: 'exact' }).range(0, SUPABASE_PAGE_SIZE - 1);
+  if (first.error) throw first.error;
 
-  while (true) {
-    const to = from + SUPABASE_PAGE_SIZE - 1;
-    const { data, error } = await buildQuery().range(from, to);
-    if (error) throw error;
+  const firstPage = first.data || [];
+  const total = first.count ?? firstPage.length;
+  if (firstPage.length < SUPABASE_PAGE_SIZE || total <= SUPABASE_PAGE_SIZE) return firstPage;
 
-    const page = data || [];
-    allRows = allRows.concat(page);
-
-    if (page.length < SUPABASE_PAGE_SIZE) break;
-    from += SUPABASE_PAGE_SIZE;
+  const rest = [];
+  for (let from = SUPABASE_PAGE_SIZE; from < total; from += SUPABASE_PAGE_SIZE) {
+    rest.push(buildQuery().range(from, from + SUPABASE_PAGE_SIZE - 1));
   }
 
-  return allRows;
+  const pages = await Promise.all(rest);
+  return pages.reduce((all, { data, error }) => {
+    if (error) throw error;
+    return all.concat(data || []);
+  }, firstPage);
+}
+
+// Short-lived cache so moving between pages doesn't download every table again.
+// Any write through the api clears it (see the wrapper at the bottom of this file).
+const LIST_CACHE_MS = 30000;
+const listCache = new Map();
+const clearListCache = () => listCache.clear();
+
+function cachedList(key, load) {
+  const hit = listCache.get(key);
+  if (hit && Date.now() - hit.at < LIST_CACHE_MS) return hit.promise;
+
+  const promise = load();
+  listCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => { if (listCache.get(key)?.promise === promise) listCache.delete(key); });
+  return promise;
 }
 
 async function listPaymentRows() {
   if (!supabaseConfigured) { await wait(); return clone(mem.pos_payments || []); }
   try {
-    return await fetchAllRows(() =>
-      supabase.from('pos_payments').select('*').order('payment_date', { ascending: false })
-    );
+    return await cachedList('pos_payments:payment_date', () => fetchAllRows((opts) =>
+      supabase.from('pos_payments').select('*', opts).order('payment_date', { ascending: false }).order('id')
+    ));
   } catch (error) {
     throw new Error(`Failed to load payments: ${error.message}`);
   }
@@ -121,7 +147,29 @@ function cleanUserRow(row) {
 
 async function dbList(table, order = 'created_at') {
   if (!supabaseConfigured) { await wait(); return clone(mem[table] || []); }
-  return fetchAllRows(() => supabase.from(table).select('*').order(order, { ascending: false }));
+  return cachedList(`${table}:${order}`, () =>
+    fetchAllRows((opts) => supabase.from(table).select('*', opts).order(order, { ascending: false }).order('id'))
+  );
+}
+
+// Uncached lookups used inside write operations, which need current data.
+async function dbGet(table, id) {
+  if (!supabaseConfigured) return clone(mem[table].find(x => x.id === id) || null);
+  const { data, error } = await supabase.from(table).select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function dbListWhere(table, column, value) {
+  if (!supabaseConfigured) return clone(mem[table].filter(x => x[column] === value));
+  return fetchAllRows((opts) => supabase.from(table).select('*', opts).eq(column, value).order('id'));
+}
+
+async function dbDeleteWhere(table, column, value) {
+  if (!supabaseConfigured) { mem[table] = mem[table].filter(x => x[column] !== value); return true; }
+  const { error } = await supabase.from(table).delete().eq(column, value);
+  if (error) throw error;
+  return true;
 }
 
 async function dbInsert(table, row) {
@@ -228,15 +276,10 @@ export const api = {
   updateCategory: (id, row) => dbUpdate('categories', id, row),
 
   deleteCategory: async (id, deleteProducts = false) => {
-    const products = (await api.listProducts()).filter(p => p.category_id === id);
+    const products = await dbListWhere('products', 'category_id', id);
     if (products.length && !deleteProducts) throw new Error('This category has products. Delete with products or move them first.');
-    if (!supabaseConfigured) {
-      if (deleteProducts) mem.products = mem.products.filter(p => p.category_id !== id);
-      mem.supplier_categories = mem.supplier_categories.filter(r => r.category_id !== id);
-    } else {
-      if (deleteProducts) await supabase.from('products').delete().eq('category_id', id);
-      await supabase.from('supplier_categories').delete().eq('category_id', id);
-    }
+    if (deleteProducts) await dbDeleteWhere('products', 'category_id', id);
+    await dbDeleteWhere('supplier_categories', 'category_id', id);
     return dbDelete('categories', id);
   },
 
@@ -246,8 +289,7 @@ export const api = {
   deleteProduct: (id) => dbDelete('products', id),
 
   updateProductStock: async (id, qtyDelta) => {
-    const products = await api.listProducts();
-    const product = products.find(p => p.id === id);
+    const product = await dbGet('products', id);
     return dbUpdate('products', id, { quantity: Math.max(0, Number(product?.quantity || 0) + Number(qtyDelta || 0)) });
   },
 
@@ -262,17 +304,15 @@ export const api = {
   updateSupplier: async (id, changes, categoryIds) => {
     const updated = await dbUpdate('suppliers', id, changes);
     if (Array.isArray(categoryIds)) {
-      if (!supabaseConfigured) mem.supplier_categories = mem.supplier_categories.filter(r => r.supplier_id !== id);
-      else await supabase.from('supplier_categories').delete().eq('supplier_id', id);
+      await dbDeleteWhere('supplier_categories', 'supplier_id', id);
       for (const category_id of categoryIds) await dbInsert('supplier_categories', { supplier_id: id, category_id });
     }
     return updated;
   },
   deleteSupplier: async (id) => {
-    const orders = (await api.listSupplierOrders()).filter(o => o.supplier_id === id);
+    const orders = await dbListWhere('supplier_orders', 'supplier_id', id);
     if (orders.length) throw new Error('This supplier has orders and cannot be deleted safely.');
-    if (!supabaseConfigured) mem.supplier_categories = mem.supplier_categories.filter(r => r.supplier_id !== id);
-    else await supabase.from('supplier_categories').delete().eq('supplier_id', id);
+    await dbDeleteWhere('supplier_categories', 'supplier_id', id);
     return dbDelete('suppliers', id);
   },
 
@@ -285,8 +325,7 @@ export const api = {
   },
   updateSupplierOrder: (id, row) => dbUpdate('supplier_orders', id, row),
   deleteSupplierOrder: async (id) => {
-    if (!supabaseConfigured) mem.supplier_order_items = mem.supplier_order_items.filter(i => i.supplier_order_id !== id);
-    else await supabase.from('supplier_order_items').delete().eq('supplier_order_id', id);
+    await dbDeleteWhere('supplier_order_items', 'supplier_order_id', id);
     return dbDelete('supplier_orders', id);
   },
 
@@ -312,11 +351,10 @@ export const api = {
   updatePosOrder: (id, row) => dbUpdate('pos_orders', id, row),
   listPosPayments: () => listPaymentRows(),
   createPosPayment: async (row) => {
-    const orders = await api.listPosOrders();
-    const order = orders.find(o => o.id === row.pos_order_id);
+    const order = await dbGet('pos_orders', row.pos_order_id);
     if (!order) throw new Error('POS order was not found.');
 
-    const payments = (await api.listPosPayments()).filter(p => p.pos_order_id === order.id);
+    const payments = await dbListWhere('pos_payments', 'pos_order_id', order.id);
     const alreadyPaid = payments.reduce((s, p) => s + Number(p.amount || 0), 0);
     const total = Number(order.total_price || 0);
     const amount = Number(row.amount || 0);
@@ -339,15 +377,30 @@ export const api = {
     return payment;
   },
   deletePosOrder: async (id) => {
-    const orderItems = (await api.listPosOrderItems()).filter(i => i.pos_order_id === id);
+    const orderItems = await dbListWhere('pos_order_items', 'pos_order_id', id);
     for (const item of orderItems) await api.updateProductStock(item.product_id, Number(item.quantity || 0));
     await deletePaymentRowsForOrder(id);
-    if (!supabaseConfigured) mem.pos_order_items = mem.pos_order_items.filter(i => i.pos_order_id !== id);
-    else await supabase.from('pos_order_items').delete().eq('pos_order_id', id);
+    await dbDeleteWhere('pos_order_items', 'pos_order_id', id);
     return dbDelete('pos_orders', id);
   },
 
   listExpenses: () => dbList('expenses', 'created_at'),
   createExpense: (row) => dbInsert('expenses', { ...row, expense_code: row.expense_code || idCode('EXP') }),
-  updateExpense: (id, row) => dbUpdate('expenses', id, row)
+  updateExpense: (id, row) => dbUpdate('expenses', id, row),
+
+  clearCache: clearListCache
 };
+
+// Every write clears the list cache before and after it runs, so pages reload
+// fresh data after a change and writes never decide based on cached rows.
+for (const [name, fn] of Object.entries(api)) {
+  if (name.startsWith('list') || name === 'getUserAccess' || name === 'clearCache') continue;
+  api[name] = async (...args) => {
+    clearListCache();
+    try {
+      return await fn(...args);
+    } finally {
+      clearListCache();
+    }
+  };
+}

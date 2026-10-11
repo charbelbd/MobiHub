@@ -47,6 +47,7 @@ export default function App() {
       if (data.user) loadAccess(data.user);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      api.clearCache();
       setUser(session?.user || null);
       setAccess(null);
       if (session?.user) loadAccess(session.user);
